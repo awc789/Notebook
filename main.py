@@ -32,8 +32,8 @@ def Generate_GEM_Samples(alpha, k_trunc=10):
     total_prob = 1.
     remain_prob = total_prob
     gem_sample = list()
-    while k_trunc != len(gem_sample):
-        V_i = beta_dist.rvs(1)
+    for i in range(k_trunc):
+        V_i = beta_dist.rvs(1)[0]
         pi_i = V_i * remain_prob
         gem_sample.append(pi_i)
         remain_prob *= (1 - V_i)
@@ -70,7 +70,7 @@ def draw_balck_white_ball(state):
     :return: return a tuple of (draw, state)
     """
     unif = stats.uniform()
-    r = unif.rvs(1)
+    r = unif.rvs(1)[0]
     if r < state['black'] / sum(state.values()):
         state['black'] += 1  # update the state
     else:
@@ -151,7 +151,7 @@ def draw_new_ball_from_urn(counts, alpha):
     :return: return a list of integers with length len(counts) + 1
     """
     unif = stats.uniform()
-    u = unif.rvs(1)
+    u = unif.rvs(1)[0]
     cum = compute_urn_prob(counts, alpha)
 
     for i, prob_c in enumerate(cum):
@@ -213,7 +213,7 @@ def draw_new_customer_from_restaurant(initial_counts, alpha, n_customers):
 
         # draw a new customer
         unif = stats.uniform()
-        u = unif.rvs(1)
+        u = unif.rvs(1)[0]
         for k, prob_c in enumerate(cum):
             if u < prob_c:
                 if k == len(cum) - 1:
@@ -236,5 +236,59 @@ def draw_new_customer_from_restaurant(initial_counts, alpha, n_customers):
 '----------------------------------------------------------------------------------------------------------------------'
 
 
-def dp_draw():
-    
+def dp_draw(alpha, base_measure, k_trunc):
+    """
+    Generate a Dirichlet Process with parameter of alpha and base_measure for k_trunc
+    :param alpha: a positive real number
+    :param base_measure: a function for generating a random variable which follows this base measure
+    :param k_trunc: a positive integer
+    :return: return a 2D array with shape (k_trunc, 2)
+    """
+    beta_dist = stats.beta(a=1, b=alpha)
+    total_prob = 1.
+    remain_prob = total_prob
+    dp_sample = list()
+    for i in range(k_trunc):
+        V_i = beta_dist.rvs(1)[0]
+        pi_i = V_i * remain_prob  # the weight of the i-th theta
+        theta_i = base_measure.rvs(1)[0]  # the i-th theta
+        dp_sample.append([pi_i, theta_i])
+        remain_prob *= (1 - V_i)
+    return np.array(dp_sample, dtype=np.float64)  # return a 2D array with shape (k_trunc, 2)
+
+
+def dirichlet_process(alpha, base_measure, k_trunc, num_samples=1):
+    """
+    Generate a Dirichlet Process with parameter of alpha and base_measure for k_trunc
+    :param alpha: a positive real number
+    :param base_measure: a function for generating a random variable which follows this base measure
+    :param k_trunc: a positive integer
+    :param num_samples: the number of times to draw from the Dirichlet Process, default is 1
+    :return: return a 3D array with shape (num_samples, k_trunc, 2)
+    """
+    dp_samples = np.zeros((num_samples, k_trunc, 2))
+    for i in range(num_samples):
+        dp_sample = dp_draw(alpha=alpha, base_measure=base_measure, k_trunc=k_trunc)
+        dp_samples[i, :, :] = dp_sample
+        print('Processed samples: %s/%s' % (i + 1, num_samples))
+        clear_output(wait=True)
+
+    print('DP Constructed:')
+    print('\t Number of samples: %s' % dp_samples.shape[0])
+    print('\t Alpha: %s' % alpha)
+    print('\t Truncation value: %s' % dp_samples.shape[1])
+    print('\t Bease measure: %s' % base_measure)
+    return dp_samples  # return a 3D array with shape (num_samples, k_trunc, 2)
+
+
+
+
+
+
+
+
+
+
+
+
+

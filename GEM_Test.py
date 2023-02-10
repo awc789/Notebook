@@ -34,3 +34,4 @@ if __name__ == '__main__':
         ax.set_xlabel(r'Dimension $i$ of GEM / Cluster weight', size=axis_size)
         ax.set_xticks(x)
         plt.tight_layout()
+        plt.show()
