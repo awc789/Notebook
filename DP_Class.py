@@ -3,7 +3,8 @@ import pandas as pd
 from numpy.random import choice
 from scipy.stats import beta, norm
 
-class DirichletProcessSample():
+
+class DirichletProcessSample(alpha=1.0, base_measure=lambda: 0):
     def __init__(self, base_measure, alpha):
         self.base_measure = base_measure
         self.alpha = alpha
@@ -32,9 +33,10 @@ class DirichletProcessSample():
         else:
             return None
 
+
 if __name__ == '__main__':
 
-    base_measure = lambda: norm().rvs()
+    base_measure = lambda a: norm().rvs(a)
     n_samples = 10000
     samples = {}
     for alpha in [1, 10, 100, 1000]:
@@ -42,6 +44,3 @@ if __name__ == '__main__':
         samples["Alpha: %s" % alpha] = [dirichlet_norm() for _ in range(n_samples)]
 
     _ = pd.DataFrame(samples).hist()
-
-
-
