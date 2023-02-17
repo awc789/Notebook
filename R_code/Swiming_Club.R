@@ -1,5 +1,6 @@
 library(gtools)
 
+# the value of the variables for the subjects is arranged in the matrix x
 x <- matrix(c(
   0, 0, 0,
   0, 0, 0,
@@ -53,10 +54,10 @@ st_dev_for_alphadp_prop <- 0.2
 for (i_iter in 2:(iter + burnin)) { # i_iter from 2 to (iter + burnin)
   print(i_iter)
   # sample \phi
-  for (icluster in 1:C) {
+  for (i_cluster in 1:C) {
     for (ivar in 1:P) {
-      number_of_successes <- sum(x[z_current == icluster, ivar] == 1)
-      phi_current[icluster, ivar, ] <- rdirichlet(1, c(lambdap + number_of_successes, sum(z_current == icluster) + lambdap - number_of_successes))
+      number_of_successes <- sum(x[z_current == i_cluster, ivar] == 1)
+      phi_current[i_cluster, ivar, ] <- rdirichlet(1, c(lambdap + number_of_successes, sum(z_current == i_cluster) + lambdap - number_of_successes))
     }
   }
 
@@ -82,30 +83,30 @@ for (i_iter in 2:(iter + burnin)) { # i_iter from 2 to (iter + burnin)
   MH_ratio_numerator <- sum(log(psi_current^(alphadp_proposed - 1)))
   MH_ratio_denominator <- sum(log(psi_current^(alphadp_current - 1)))
 
-  forTruncation1 <- pnorm(right_limit_alphadp, alphadp_proposed, st_dev_for_alphadp_prop) - pnorm(0.0001, alphadp_proposed, st_dev_for_alphadp_prop)
-  forTruncation2 <- pnorm(right_limit_alphadp, alphadp_current, st_dev_for_alphadp_prop) - pnorm(0.0001, alphadp_current, st_dev_for_alphadp_prop)
+  for_truncation_1 <- pnorm(right_limit_alphadp, alphadp_proposed, st_dev_for_alphadp_prop) - pnorm(0.0001, alphadp_proposed, st_dev_for_alphadp_prop)
+  for_truncation_2 <- pnorm(right_limit_alphadp, alphadp_current, st_dev_for_alphadp_prop) - pnorm(0.0001, alphadp_current, st_dev_for_alphadp_prop)
 
-  ratioOfQproposalsNum <- dnorm(alphadp_current, alphadp_proposed, st_dev_for_alphadp_prop) / forTruncation1
-  ratioOfQproposalsDen <- dnorm(alphadp_proposed, alphadp_current, st_dev_for_alphadp_prop) / forTruncation2
-  ratioOfQproposals <- ratioOfQproposalsNum / ratioOfQproposalsDen
+  ratio_of_qproposals_num <- dnorm(alphadp_current, alphadp_proposed, st_dev_for_alphadp_prop) / for_truncation_1
+  ratio_of_qproposals_den <- dnorm(alphadp_proposed, alphadp_current, st_dev_for_alphadp_prop) / for_truncation_2
+  ratio_of_qproposals <- ratio_of_qproposals_num / ratio_of_qproposals_den
 
-  MHratio <- exp(MH_ratio_numerator - MH_ratio_denominator) * ratioOfQproposals
-  acceptProb <- min(c(1, MHratio))
-  if (runif(1, 0, 1) < acceptProb) {
-    alphadpcurrent <- alphadp_proposed
+  MH_ratio <- exp(MH_ratio_numerator - MH_ratio_denominator) * ratio_of_qproposals
+  accept_prob <- min(c(1, MH_ratio))
+  if (runif(1, 0, 1) < accept_prob) {
+    alphadp_current <- alphadp_proposed
   }
 
   # sample z
-  for (isub in 1:N) {
-    probForz <- rep(0, C)
-    for (icluster in 1:C) {
-      probForz[icluster] <- psi_current[icluster]
-      for (iForProbForz in 1:P) {
-        probForz[icluster] <- probForz[icluster] * phi_current[icluster, iForProbForz, x[isub, iForProbForz] + 1]
+  for (i_sub in 1:N) {
+    prob_for_z <- rep(0, C)
+    for (i_cluster in 1:C) {
+      prob_for_z[i_cluster] <- psi_current[i_cluster]
+      for (i_for_prob_for_z in 1:P) {
+        prob_for_z[i_cluster] <- prob_for_z[i_cluster] * phi_current[i_cluster, i_for_prob_for_z, x[i_sub, i_for_prob_for_z] + 1]
       }
     }
-    probForz <- probForz / sum(probForz)
-    z_new[isub] <- which(as.vector(rmultinom(1, 1, probForz) == 1))
+    prob_for_z <- prob_for_z / sum(prob_for_z)
+    z_new[i_sub] <- which(as.vector(rmultinom(1, 1, prob_for_z) == 1))
   }
 
   z_current <- z_new
