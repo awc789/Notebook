@@ -318,6 +318,7 @@ Then we calculate the the central point of each clustering class, and save them 
 ```{r}
 ## The parameters below are just for a quick presentation.
 name_workers <- paste("worker_", 1:1, sep = "")
+name_GMM <- paste("GMM_", 1:4, sep = "")
 num_dp <- 1000
 MCMC_mum <- 1000
 
@@ -336,10 +337,10 @@ for(current_worker in name_workers){
   data_dp <- matrix(c(data_dp$X1, data_dp$X2), ncol = 2, byrow = FALSE)
   
   dpCluster <-  DirichletProcessMvnormal(data_dp)
-  # dpCluster <- Fit(dpCluster, MCMC_mum, progressBar = FALSE)
+  dpCluster <- Fit(dpCluster, MCMC_mum, progressBar = FALSE)
   
-  fx <- function(dpCluster) Fit(dpCluster, 1000, progressBar = FALSE)
-  dpCluster <- mclapply(dpCluster, fx, mc.cores = detectCores())
+  #fx <- function(dpCluster) Fit(dpCluster, 1000, progressBar = FALSE)
+  #dpCluster <- mclapply(dpCluster, fx, mc.cores = detectCores())
   plot(dpCluster)
   
   data_dp_cluster <- data[1:num_dp,]

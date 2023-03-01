@@ -1,0 +1,331 @@
+---
+title: "Divide_and_Conquer_v3"
+output: html_document
+date: "2023-02-24"
+---
+
+# 0. Before the algorithm
+
+Before we start our divide and conquer algorithm, we need to import some packaged that used in this R exercise.
+
+```{r, include=FALSE}
+# Import all the required packages
+library(MASS) # Simulate from a Multivariate Normal Distribution
+library(ggplot2)
+library(dirichletprocess) # Dirichlet Process
+library(dbscan) # Density-based Clustering -- DBSCAN
+library(dplyr)
+library(class)
+# Parallel Computing
+library(parallel) 
+library(doParallel)
+library(foreach)
+```
+
+And also change the path of program which can make it easier for saving and loading data.
+
+```{r setup, include=FALSE}
+# Set the path that we needed
+path <- paste('/Users/awc789/Library/CloudStorage/OneDrive-UniversityofStAndrews/GitHub/Notebook/R_code', '/DC_data/', sep = '')
+
+if(!file.exists(path)){
+  dir.create(path)
+}
+
+setwd(path)
+```
+
+Finally, determine the initial parameters of both worker numbers and the size of the entire dataset. In this exercise, we have $8$ workers and, for each worker, it has $1,000$ data in each distribution. So we would have $8,000$ data of each distribution with $8$ distribution of total $64,000$ data.
+
+```{r}
+# The Synthetic Data Setup
+workers_num <- detectCores() * 2   # Have 8 workers
+partition <- 1000  # Each distribution generate 1,000 samples in each worker
+num <- partition * workers_num  # The total sample number from each distribution (1 million)
+```
+
+# 1. Generate the initial data with 2-D Normal Distribution
+
+We using $8$ different $2-D$ Normal distributions to generate samples with mean and variance below:
+
+$$
+（\mu_1, \mu_2, \cdot \cdot \cdot, \mu_8)  = 
+\begin{pmatrix}
+6 & 8 & 20 & 22 & 1.5 & 6 & 8 & 21 \\
+4 & 22.5 & 22 & 6.5 & 6 & 1.5 & 31 & 29\\
+\end{pmatrix}
+$$
+
+and
+
+$$
+\sum_1 = \begin{pmatrix}4.84 & 0 \\ 0 & 2.89 \end{pmatrix}, \sum_2 = \begin{pmatrix}4.84 & 0 \\ 0 & 2.89 \end{pmatrix}, \sum_3 = \begin{pmatrix} 3.61 & -5.05 \\ -5.05 & 14.44 \end{pmatrix},  \sum_4= \begin{pmatrix}12.25 & 0 \\ 0 & 3.24 \end{pmatrix}  
+$$
+
+$$
+\sum_5 = \begin{pmatrix}3.24 & 0 \\ 0 & 12.25 \end{pmatrix}, \sum_6 = \begin{pmatrix}14.44 & 0 \\ 0 & 2.25 \end{pmatrix}, \sum_7 = \begin{pmatrix}2.25 & 0 \\ 0 & 17.64 \end{pmatrix}, \sum_8 = \begin{pmatrix}2.25 & 4.2 \\ 4.2 & 16 \end{pmatrix}
+$$
+
+Next we separate 8 Normal distributions into 4 classes and combine them together with weight $W_{GMM} = ({\frac{1}{4},\frac{1}{4},\frac{1}{4},\frac{1}{4}})$ and $\omega_1 = (\frac{1}{3}, \frac{1}{3}, \frac{1}{3})$, $\omega_2 = (\frac{1}{2}, \frac{1}{2})$, $\omega_3 = (\frac{1}{2}, \frac{1}{2})$, $\omega_4 = (1)$
+
+The weight $W_{GMM}$ is the weight for $4$ classes,
+
+and the weight $\omega_i, i \in{1,2,3,4}$ is the weight for $8$ Normal distributions to combine them into $4$ classes;
+
+This idea of the mixture of mixtures is from the paper "Distributed Bayesian clustering using finite mixture of mixtures" which we had reading in for our first reading meeting.
+
+```{r}
+miu_matirx <- matrix(c(6, 4, 8, 22.5, 20, 22, 22, 6.5, 1.5, 6, 6, 1.5, 8, 31, 21, 29),
+                     nrow = 2, ncol = 8, byrow=FALSE)
+
+covar_matrix <-array(c(4.84, 0, 0, 2.89, 3.61, 5.05, 5.05, 14.44, 3.61, -5.05,
+                       -5.05, 14.44, 12.25, 0, 0, 3.24, 3.24, 0, 0, 12.25, 
+                       14.44, 0, 0, 2.25, 2.25, 0, 0, 17.64, 2.25, 4.2, 4.2, 16),
+                     dim = c(2, 2, 8))
+
+weight_GMM <- c(1/4, 1/4, 1/4, 1/4)
+w1 <- c(1/3, 1/3 ,1/3)
+w2 <- c(1/2, 1/2)
+w3 <- c(1/2, 1/2)
+w4 <- c(1)
+```
+
+## 1.1 Eight Normal Distributions
+
+Generate the data, and also label the data.
+
+```{r}
+## Generate the Initial Data
+x_1 <- data.frame(mvrnorm(n = num, miu_matirx[,1], covar_matrix[, , 1]))
+x_6 <- data.frame(mvrnorm(n = num, miu_matirx[,2], covar_matrix[, , 2]))
+x_4 <- data.frame(mvrnorm(n = num, miu_matirx[,3], covar_matrix[, , 3]))
+x_8 <- data.frame(mvrnorm(n = num, miu_matirx[,4], covar_matrix[, , 4]))
+x_2 <- data.frame(mvrnorm(n = num, miu_matirx[,5], covar_matrix[, , 5]))
+x_3 <- data.frame(mvrnorm(n = num, miu_matirx[,6], covar_matrix[, , 6]))
+x_7 <- data.frame(mvrnorm(n = num, miu_matirx[,7], covar_matrix[, , 7]))
+x_5 <- data.frame(mvrnorm(n = num, miu_matirx[,8], covar_matrix[, , 8]))
+
+## Give Data lables
+x_1$component = rep(1,num)
+x_2$component = rep(1,num)
+x_3$component = rep(1,num)
+x_4$component = rep(4,num)
+x_5$component = rep(4,num)
+x_6$component = rep(8,num)
+x_7$component = rep(8,num)
+x_8$component = rep(12,num)
+
+## Give Data sub_lables
+x_1$subcomponent = rep(1,num)
+x_2$subcomponent = rep(2,num)
+x_3$subcomponent = rep(3,num)
+x_4$subcomponent = rep(4,num)
+x_5$subcomponent = rep(5,num)
+x_6$subcomponent = rep(6,num)
+x_7$subcomponent = rep(7,num)
+x_8$subcomponent = rep(8,num)
+```
+
+Not used in this algorithm, but still generate the mixture model result:
+
+```{r}
+GMM_1 <- w1[1] * x_1 + w1[2] * x_2 + w1[3] * x_3
+GMM_2 <- w2[1] * x_4 + w2[2] * x_5
+GMM_3 <- w3[1] * x_6 + w3[2] * x_7
+GMM_4 <- w4[1] * x_8
+
+Mixture_GMM <- weight_GMM[1] * GMM_1 + weight_GMM[2] * GMM_2 + weight_GMM[3] * GMM_3 + weight_GMM[4] * GMM_4
+```
+
+## 1.2 Split the data and save to each worker
+
+Save the whole data in Global Level
+
+```{r}
+write.table(x_1, file = paste(path, "x_1_total.txt", sep=''), sep = ",")
+write.table(x_2, file = paste(path, "x_2_total.txt", sep=''), sep = ",")
+write.table(x_3, file = paste(path, "x_3_total.txt", sep=''), sep = ",")
+write.table(x_4, file = paste(path, "x_4_total.txt", sep=''), sep = ",")
+write.table(x_5, file = paste(path, "x_5_total.txt", sep=''), sep = ",")
+write.table(x_6, file = paste(path, "x_6_total.txt", sep=''), sep = ",")
+write.table(x_7, file = paste(path, "x_7_total.txt", sep=''), sep = ",")
+write.table(x_8, file = paste(path, "x_8_total.txt", sep=''), sep = ",")
+
+write.table(GMM_1, file = paste(path, "GMM_1_total.txt", sep=''), sep = ",")
+write.table(GMM_2, file = paste(path, "GMM_2_total.txt", sep=''), sep = ",")
+write.table(GMM_3, file = paste(path, "GMM_3_total.txt", sep=''), sep = ",")
+write.table(GMM_4, file = paste(path, "GMM_4_total.txt", sep=''), sep = ",")
+
+write.table(Mixture_GMM, file = paste(path, "Mixture_GMM_total.txt", sep=''), sep = ",")
+```
+
+Save the spited data in Locals Level
+
+```{r}
+name_x <- paste("x_", 1:8, sep = "")
+name_GMM <- paste("GMM_", 1:4, sep = "")
+name_workers <- paste("worker_", 1:workers_num, sep = "")
+count <- 0
+
+for(i in list(x_1, x_2, x_3, x_4, x_5, x_6, x_7, x_8)){
+  count <- count +1
+  current_x <- name_x[count]
+  # For the workers
+  for(k in rep(1:workers_num)){
+    current_worker <- name_workers[k]
+    folder <- paste(path, '/', current_worker, sep = "")
+    # check the folder
+    if(!file.exists(folder)){
+      dir.create(folder)
+    }
+    # for each workers
+    start_loop <- partition * (k-1) + 1
+    end_loop <- partition * k
+    temp <- i[start_loop:end_loop,]
+    f <- paste(path, current_worker, '/', current_x, '_', current_worker, '.txt', sep = "")
+    write.table(temp, file = f, sep = ",")
+  }
+}
+
+count <- 0
+for(i in list(GMM_1, GMM_2, GMM_3, GMM_4)){
+  count <- count +1
+  current_GMM <- name_GMM[count]
+  # For the workers
+  for(k in rep(1:workers_num)){
+    current_worker <- name_workers[k]
+    folder <- paste(path, '/', current_worker, sep = "")
+    # check the folder
+    if(!file.exists(folder)){
+      dir.create(folder)
+    }
+    # for each workers
+    start_loop <- partition * (k-1) + 1
+    end_loop <- partition * k
+    temp <- i[start_loop:end_loop,]
+    f <- paste(path, current_worker, '/', current_GMM, '_', current_worker, '.txt', sep = "")
+    write.table(temp, file = f, sep = ",")
+  }
+}
+
+
+for(k in rep(1:workers_num)){
+  current_worker <- name_workers[k]
+  folder <- paste(path, '/', current_worker, sep = "")
+  # for each workers
+  start_loop <- partition * (k-1) + 1
+  end_loop <- partition * k
+  temp <- i[start_loop:end_loop,]
+  f <- paste(path, current_worker, '/', 'Mixture_GMM_', current_worker, '.txt', sep = "")
+  write.table(temp, file = f, sep = ",")
+}
+```
+
+# 2. Divide-and-Conquer in Workers
+
+```{r}
+name_x <- paste("x_", 1:8, sep = "")
+name_GMM <- paste("GMM_", 1:4, sep = "")
+name_workers <- paste("worker_", 1:workers_num, sep = "")
+```
+
+## 2.1 Parallel Computing Function
+
+```{r}
+parallel_function <- function(index){
+  # 'original' or 'GMM'
+  p <- 'original'
+  
+  dp_num <- 3200    # The number of subsamping for DP clustering
+  MCMC_num <- 1500  # The number of samples obtained during MCMC
+  
+  current_worker <- paste("worker_", index, sep = "")
+  name_GMM <- paste("GMM_", 1:4, sep = "")
+  name_x <- paste("x_", 1:8, sep = "")
+  
+
+  data <- data.frame()
+  if (p == 'original') {
+    for (current_x in name_x) {
+      f <- paste(path, current_worker, '/', current_x, '_', current_worker, '.txt', sep = "")
+      data_temp <- read.table(f, sep = ',', header = TRUE)
+      data <- rbind(data, data_temp)
+    }
+  } else if (p == 'GMM') {
+    for (current_GMM in name_GMM) {
+      f <- paste(path, current_worker, '/', current_GMM, '_', current_worker, '.txt', sep = "")
+      data_temp <- read.table(f, sep = ',', header = TRUE)
+      data <- rbind(data, data_temp)
+      }
+    }
+  
+  # --------------------------------------------
+  # DP for the clustering
+  data <- data[sample(1:nrow(data)),] # shuffle
+  data_dp <- data[1:dp_num,]
+  data_dp <- matrix(c(data_dp$X1, data_dp$X2), ncol = 2, byrow = FALSE)
+  
+  
+  dpCluster <-  DirichletProcessMvnormal(data_dp)
+  dpCluster <- Fit(dpCluster, MCMC_num, progressBar = FALSE)
+  #plot(dpCluster)
+  
+  data_dp_cluster <- data[1:dp_num,]
+  data_dp_cluster$clusterLabels <- dpCluster$clusterLabels
+  
+  label_result <- t(data.frame(table(dpCluster$clusterLabels)))
+  drop_clusterlabels <- c()
+  for (i in seq(ncol(label_result))) {
+    if(label_result[2,i] <= (nrow(data_dp_cluster)/ncol(label_result))){
+      drop_clusterlabels <- append(drop_clusterlabels, i)
+      data_dp_cluster <- data_dp_cluster[data_dp_cluster$clusterLabels != i,]
+    }
+  }
+  
+  remain_clusterlabels <- data.frame(table(data_dp_cluster$clusterLabels))
+  center_point <- data.frame(X1 = c(1:nrow(remain_clusterlabels)), 
+                             X2 = c(1:nrow(remain_clusterlabels)), 
+                             clusterlabels = c(1:nrow(remain_clusterlabels)))
+  
+  remain_clusterlabels <- remain_clusterlabels$Var1
+  for(i in remain_clusterlabels){
+    i <- as.numeric(i)
+    temp_X1 <- data_dp_cluster[data_dp_cluster$clusterLabels == i,]$X1
+    temp_X2 <- data_dp_cluster[data_dp_cluster$clusterLabels == i,]$X2
+    
+    center_point[i,1] <- mean(temp_X1)
+    center_point[i,2] <- mean(temp_X2)
+    center_point[i,3] <- i
+  }
+  
+  folder <- paste(path, '/Center_point/', sep = "")
+  # check the folder
+  if(!file.exists(folder)){
+    dir.create(folder)
+  }
+  
+  f <- paste(path, 'Center_point/Center_point_', current_worker, '.txt', sep = "")
+  write.table(center_point, file = f, sep = ",")
+  
+  return('Null')
+}
+```
+
+Using the packages below for the parallel computing:
+
+``` r
+library(doParallel)
+library(foreach)
+```
+
+```{r}
+
+cl_cores <- detectCores(logical = F)
+cl <- makeCluster(cl_cores)
+registerDoParallel(cl) 
+clusterExport(cl,deparse(substitute(parallel_function), DirichletProcessMvnormal))
+  
+x <- foreach(i = 1:workers_num, .combine <- rbind, .packages = c('dirichletprocess')) %dopar% parallel_function(i)
+  
+stopCluster(cl)
+```
