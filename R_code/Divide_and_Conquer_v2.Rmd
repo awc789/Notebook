@@ -409,6 +409,7 @@ for(current_worker in name_workers){
   data <- rbind(data, data_temp)
 }
 
+data <- na.omit(data)
 ggplot(data, aes(x = X1, y = X2, colour = clusterlabels)) + 
   geom_point(size=3)
 ```

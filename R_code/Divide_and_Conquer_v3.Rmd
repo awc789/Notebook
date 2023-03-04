@@ -237,7 +237,7 @@ parallel_function <- function(index){
   p <- 'original'
   
   dp_num <- 3200    # The number of subsamping for DP clustering
-  MCMC_num <- 1500  # The number of samples obtained during MCMC
+  MCMC_num <- 2000  # The number of samples obtained during MCMC
   
   current_worker <- paste("worker_", index, sep = "")
   name_GMM <- paste("GMM_", 1:4, sep = "")
