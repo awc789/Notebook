@@ -28,18 +28,20 @@ And also change the path of program which can make it easier for saving and load
 # Set the path that we needed
 path <- paste('/Users/awc789/Library/CloudStorage/OneDrive-UniversityofStAndrews/GitHub/Notebook/R_code', '/DC_data/', sep = '')
 
+path <- paste("C:/Users/hw209/OneDrive - University of St Andrews/GitHub/Notebook/R_code/DC_data")
+
 if(!file.exists(path)){
   dir.create(path)
 }
 
-setwd(path)
+# setwd(path)
 ```
 
 Finally, determine the initial parameters of both worker numbers and the size of the entire dataset. In this exercise, we have $8$ workers and, for each worker, it has $1,000$ data in each distribution. So we would have $8,000$ data of each distribution with $8$ distribution of total $64,000$ data.
 
 ```{r}
 # The Synthetic Data Setup
-workers_num <- detectCores() * 2   # Have 8 workers
+workers_num <- detectCores()   # Have 8 workers
 partition <- 1000  # Each distribution generate 1,000 samples in each worker
 num <- partition * workers_num  # The total sample number from each distribution (1 million)
 ```
@@ -182,7 +184,7 @@ for(i in list(x_1, x_2, x_3, x_4, x_5, x_6, x_7, x_8)){
     start_loop <- partition * (k-1) + 1
     end_loop <- partition * k
     temp <- i[start_loop:end_loop,]
-    f <- paste(path, current_worker, '/', current_x, '_', current_worker, '.txt', sep = "")
+    f <- paste(path, '/', current_worker, '/', current_x, '_', current_worker, '.txt', sep = "")
     write.table(temp, file = f, sep = ",")
   }
 }
@@ -203,7 +205,7 @@ for(i in list(GMM_1, GMM_2, GMM_3, GMM_4)){
     start_loop <- partition * (k-1) + 1
     end_loop <- partition * k
     temp <- i[start_loop:end_loop,]
-    f <- paste(path, current_worker, '/', current_GMM, '_', current_worker, '.txt', sep = "")
+    f <- paste(path, '/', current_worker, '/', current_GMM, '_', current_worker, '.txt', sep = "")
     write.table(temp, file = f, sep = ",")
   }
 }
@@ -216,7 +218,7 @@ for(k in rep(1:workers_num)){
   start_loop <- partition * (k-1) + 1
   end_loop <- partition * k
   temp <- i[start_loop:end_loop,]
-  f <- paste(path, current_worker, '/', 'Mixture_GMM_', current_worker, '.txt', sep = "")
+  f <- paste(path, '/', current_worker, '/', 'Mixture_GMM_', current_worker, '.txt', sep = "")
   write.table(temp, file = f, sep = ",")
 }
 ```
@@ -236,8 +238,8 @@ parallel_function <- function(index){
   # 'original' or 'GMM'
   p <- 'original'
   
-  dp_num <- 3200    # The number of subsamping for DP clustering
-  MCMC_num <- 2000  # The number of samples obtained during MCMC
+  dp_num <- 5000    # The number of subsamping for DP clustering
+  MCMC_num <- 2500  # The number of samples obtained during MCMC
   
   current_worker <- paste("worker_", index, sep = "")
   name_GMM <- paste("GMM_", 1:4, sep = "")
